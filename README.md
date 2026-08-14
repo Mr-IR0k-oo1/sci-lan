@@ -1,194 +1,368 @@
 # GridFlex
 
-Interactive Renewable Energy Integration and Grid Stability Planning Tool.
+**Interactive Renewable Energy Integration and Grid Stability Planning Tool**
 
-Phase 1 backend: a foundational FastAPI service for representing and analyzing a
-small electrical power grid — bus/line/generator/load modeling, topology
-validation, Y-bus construction, an AC Newton-Raphson power-flow solver, and a
-pluggable computation-engine abstraction with Scilab support.
+---
 
-The frontend lives separately and is **not** part of this backend repository.
+## Problem
 
-## Purpose
+Integrating renewable energy into electrical grids changes voltage profiles and power flow distribution in ways that are difficult to predict without computational tools. Engineers need to answer:
 
-Model a small transmission/distribution network and answer:
+- Will this solar farm push voltages outside safe limits?
+- Will this load growth overload transmission lines?
+- Which mitigation intervention will actually help?
 
-- Is my network topologically valid?
-- What are the steady-state voltages at each bus?
-- How much power flows over each line and how loaded is it?
-- What does each generator (including solar/wind) contribute?
+Commercial tools (PSS/E, PowerWorld) cost tens of thousands of dollars per license and produce static reports. GridFlex provides an interactive, open-source alternative for learning, planning, and demonstration.
 
-Phase 1 intentionally excludes optimization and recommendation engines.
+---
+
+## Solution
+
+GridFlex combines a visual grid editor with a real AC power flow solver, automated stress analysis, explainable recommendations, and mitigation testing — all in a single interactive tool.
+
+**No hardcoded results. No fake timers. Every result is computed.**
+
+---
+
+## Key Features
+
+- 🔌 **Visual grid editor** — build buses, lines, generators, and loads interactively
+- ⚡ **AC power flow** — Newton-Raphson in polar form over the per-unit Y-bus
+- 🌞 **Renewable integration** — model solar, wind, and battery storage
+- 🎭 **Scenario analysis** — what-if modifications without mutating the base grid
+- 📊 **Grid stress score** — multi-component 0–100 score with explanations
+- 🔍 **Issue detection** — voltage violations, line overloads, generation imbalance
+- 💡 **Explainable recommendations** — rules-based, priority-ranked, auditable
+- 🛠️ **Mitigation testing** — test interventions before committing
+- 📚 **Engineering case studies** — five predefined scenarios, all computed live
+- 📄 **Engineering reports** — JSON, CSV, and Markdown export
+- 🔄 **Reproducible analysis** — SHA-256 input hashing for audit trails
+- 🔀 **Dual engine support** — Python (always available) + Scilab (optional)
+
+---
 
 ## Architecture
 
 ```
-backend/
-├── app/
-│   ├── main.py                  # FastAPI app, routers, exception handlers
-│   ├── api/routes/
-│   │   ├── grid.py              # grid create/get/validate
-│   │   └── analysis.py          # power flow + engine status
-│   ├── domain/
-│   │   ├── models.py            # Bus, TransmissionLine, Generator, Load, GridModel
-│   │   └── enums.py             # BusType, GeneratorType, status enums
-│   ├── schemas/                 # API request/response DTOs
-│   ├── services/
-│   │   ├── grid_service.py      # in-memory grid store
-│   │   ├── validation_service.py# structured topology validation
-│   │   └── power_flow_service.py# engine selection + result normalization
-│   ├── power_system/
-│   │   ├── per_unit.py          # MW <-> pu, kV <-> pu helpers
-│   │   ├── ybus.py              # build_ybus
-│   │   ├── power_flow.py        # Newton-Raphson AC power flow
-│   │   ├── results.py           # bus/line/summary result building
-│   │   └── engines.py           # PowerFlowEngine abstraction + registry
-│   ├── scilab/
-│   │   ├── runner.py            # availability detection + execution
-│   │   └── scripts/power_flow.sci
-│   └── core/                    # config, exceptions
-├── examples/sample_grid.json    # 5-bus sample network
-└── tests/                       # pytest suite
+                    REACT FRONTEND
+                           │
+                           ▼
+                        FASTAPI
+                           │
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+      GRID MODEL       SCENARIOS       CASE STUDIES
+          │                │                │
+          └────────────────┼────────────────┘
+                           ▼
+                   POWER FLOW ENGINE
+                      │           │
+                      ▼           ▼
+                   PYTHON       SCILAB
+                      │           │
+                      └─────┬─────┘
+                            ▼
+                    NORMALIZED RESULTS
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+           STRESS       ISSUES      COMPARISON
+              │
+              ▼
+       RECOMMENDATION ENGINE
+              │
+              ▼
+       MITIGATION CANDIDATES
+              │
+              ▼
+         TEMPORARY TEST
+              │
+              ▼
+             REPORT
 ```
 
-### Engine abstraction
+---
 
-The API never depends on a concrete solver. `PowerFlowEngine` defines
-`info()` and `run()`; `PythonPowerFlowEngine` (default, always available) and
-`ScilabPowerFlowEngine` (available only when Scilab is installed) implement it.
-The engine that actually executed an analysis is always reported in the
-response — there is no silent fallback.
+## Technology Stack
 
-## Backend setup
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, TypeScript, Vite |
+| Backend | Python 3.12, FastAPI, Uvicorn |
+| Solver | NumPy (Python engine), Scilab (optional) |
+| Validation | Pydantic v2 |
+| Testing | pytest, Vitest, @testing-library/react |
+| Container | Docker, docker-compose, nginx |
 
-Requires Python 3.12+.
+---
+
+## Computational Engines
+
+### Python Engine (default)
+
+Pure-Python Newton-Raphson AC power flow using NumPy.
+
+- Y-bus construction with susceptance shunts
+- Full H/N/J/L Jacobian, solved with `numpy.linalg.solve`
+- SLACK, PV, PQ bus support
+- Default tolerance: 1e-6 pu, max iterations: 20
+- Always available — no external dependencies
+
+### Scilab Engine (optional)
+
+The same Newton-Raphson algorithm implemented in Scilab (`backend/app/scilab/scripts/power_flow.sci`), executed as a subprocess via `scilab-cli`.
+
+- Detected automatically at startup
+- Reported honestly in `/api/v1/engines` — never faked
+- Falls back to Python when unavailable (engine shown in UI)
+- Results normalized to the same schema as Python
+
+---
+
+## How It Works
+
+```
+Grid
+  ↓ (create / edit buses, lines, generators, loads)
+Power Flow
+  ↓ (Newton-Raphson AC solver, convergence check)
+Scenario
+  ↓ (apply renewable output / load overrides — non-destructive)
+Stress Analysis
+  ↓ (voltage, transmission, generation, renewable impact scores)
+Recommendations
+  ↓ (rules-based, priority-ranked, linked to issues)
+Mitigation Testing
+  ↓ (run temporary modification, compare before/after)
+Report
+  ↓ (JSON / CSV / Markdown export)
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.12+
+- Node.js 20+
+
+### Backend
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-## Dependencies
-
-- `fastapi` — HTTP framework
-- `uvicorn` — ASGI server
-- `pydantic` — domain models and schemas
-- `numpy` — linear algebra for the power-flow solver
-- `pytest` + `httpx` — tests
-
-NumPy is the only computational dependency. SciPy is **not** required at
-runtime (it was used only to independently cross-check the solver during
-development).
-
-## Run the FastAPI server
-
-```bash
-cd backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-The sample grid is loaded into the in-memory store on startup as
-`grid_id = "sample"`. Open `http://127.0.0.1:8000/docs` for the interactive UI.
+Backend starts at `http://localhost:8000`. Interactive API docs at `http://localhost:8000/docs`.
 
-## Run the tests
-
-```bash
-cd backend
-python -m pytest
-```
-
-## Scilab integration status
-
-- `GET /api/v1/engines` reports `scilab.available: true|false` plus version.
-- The Python engine is complete and fully tested.
-- The Scilab runner (`app/scilab/runner.py`) detects the executable, renders a
-  Scilab input script from the grid, executes `scilab-cli -nb -e ...`, and
-  parses the solver output.
-- `app/scilab/scripts/power_flow.sci` implements the same Newton-Raphson
-  algorithm in Scilab. It is **written but not executed/tested here** because
-  Scilab is not installed in the development environment.
-- If Scilab is unavailable, the engine reports `unavailable` and returns a
-  clear `scilab_unavailable` error if selected — it never pretends to run.
-
-Scilab workflow (on a machine with Scilab):
-
-1. Confirm detection: `GET /api/v1/engines` shows `scilab: available`.
-2. Run power flow with `{"engine": "scilab"}`.
-3. The runner writes temporary `gridflex_inputs.sci` / `gridflex_main.sci`,
-   executes the solver script, and reads `gridflex_output.txt`.
-
-## Power flow
-
-Newton-Raphson in polar form over the per-unit Y-bus. Supports SLACK, PV, and
-PQ buses. Voltages initialized to specified values (slack/PV) or 1.0 pu (PQ);
-angles start at 0. The Jacobian is built from the standard H/N/J/L submatrices
-and solved with `numpy.linalg.solve`. Converges when the largest active/reactive
-mismatch falls below `tolerance` (default 1e-6) or stops at
-`max_iterations` (default 20).
-
-- Non-convergence returns a **structured failure state**
-  (`converged: false`, `status: "not_converged"`, empty results), never fake
-  numbers.
-- Line loading = `|S_from| · base_mva / thermal_limit`. Status thresholds:
-  `< 80%` NORMAL, `80–100%` WARNING, `> 100%` OVERLOADED (configurable in
-  `app/core/config.py`).
-- Bus status is derived from the per-unit voltage band (0.95–1.05 NORMAL,
-  0.90–1.10 WARNING, outside CRITICAL; configurable).
-- Reactive limits of PV generators are **not enforced** in Phase 1.
-
-## Sample API requests
+### Frontend
 
 ```bash
-# Engine status
-curl http://127.0.0.1:8000/api/v1/engines
-
-# Create a grid
-curl -X POST http://127.0.0.1:8000/api/v1/grids \
-  -H 'Content-Type: application/json' \
-  -d @examples/sample_grid.json
-
-# Get a grid
-curl http://127.0.0.1:8000/api/v1/grids/sample
-
-# Validate topology
-curl -X POST http://127.0.0.1:8000/api/v1/grids/sample/validate
-
-# Run power flow (python engine)
-curl -X POST http://127.0.0.1:8000/api/v1/grids/sample/analyze/power-flow \
-  -H 'Content-Type: application/json' -d '{}'
-
-# Run power flow (scilab engine, if available)
-curl -X POST http://127.0.0.1:8000/api/v1/grids/sample/analyze/power-flow \
-  -H 'Content-Type: application/json' -d '{"engine": "scilab"}'
+cd frontend
+npm install
+npm run dev
 ```
 
-### Endpoints
+Frontend starts at `http://localhost:5173`. The Vite dev server proxies `/api` to the backend.
+
+### Environment Configuration
+
+```bash
+cp .env.example .env
+# Edit .env as needed
+```
+
+See `.env.example` for all available variables.
+
+---
+
+## Docker Setup
+
+```bash
+# Build and run both services
+docker-compose up --build
+
+# Frontend:  http://localhost:80
+# Backend:   http://localhost:8000
+# API docs:  http://localhost:8000/docs
+```
+
+> **Note:** Scilab is not included in the Docker images. The Python engine is always available. See [Scilab Setup](#scilab-setup) for optional Scilab support.
+
+---
+
+## Scilab Setup
+
+Scilab is entirely optional. The Python engine provides identical results.
+
+To enable Scilab:
+
+1. Install Scilab: https://www.scilab.org/download/scilab-2024
+2. Verify: `scilab-cli -version`
+3. Set env var (optional, if not on PATH):
+
+```bash
+export GRIDFLEX_SCILAB_EXECUTABLE=/usr/bin/scilab-cli
+```
+
+4. Restart the backend. `GET /api/v1/engines` will report `scilab.available: true`.
+
+---
+
+## Case Studies
+
+Five predefined engineering scenarios, all computed live:
+
+| ID | Scenario | Demonstrates |
+|----|----------|-------------|
+| `normal_operation` | Balanced base load | Healthy grid baseline |
+| `over_voltage` | 200 MW solar spike | Voltage stress (>1.05 pu) |
+| `line_overload` | 150% load scaling | Transmission overload (>100%) |
+| `renewable_integration` | Gradual solar ramp | Penetration impact |
+| `battery_support` | Battery discharge | Storage as mitigation |
+
+Access via the **Case Studies** button in the top bar, or:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/case-studies/over_voltage/run
+```
+
+---
+
+## Demo
+
+**Duration:** 4–6 minutes. See [`docs/DEMO_FALLBACK.md`](docs/DEMO_FALLBACK.md) for the fallback plan.
+
+**Reset demo state before each session:**
+```bash
+curl -X POST http://localhost:8000/api/v1/demo/reset
+```
+
+**Flow:**
+
+1. Load the Renewable Integration case study
+2. Run base grid analysis → show normal state
+3. Increase solar generation → run scenario
+4. Show voltage impact in the results panel
+5. Open stress analysis → show issue evidence
+6. Show explainable recommendation
+7. Test a mitigation → show before/after comparison
+8. Generate engineering report
+
+---
+
+## API Documentation
+
+Interactive OpenAPI docs: `http://localhost:8000/docs`
+
+Full API contract: [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
+
+Key endpoints:
 
 | Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST   | `/api/v1/grids` | Create a grid (in-memory) |
-| GET    | `/api/v1/grids/{grid_id}` | Retrieve a grid |
-| POST   | `/api/v1/grids/{grid_id}/validate` | Validate topology |
-| POST   | `/api/v1/grids/{grid_id}/analyze/power-flow` | Run AC power flow |
-| GET    | `/api/v1/engines` | Engine availability and versions |
+|--------|------|---------|
+| `GET` | `/api/v1/health` | System health + engine availability |
+| `GET` | `/api/v1/grids` | List grids |
+| `POST` | `/api/v1/grids` | Create grid |
+| `POST` | `/api/v1/grids/{id}/validate` | Validate topology |
+| `POST` | `/api/v1/grids/{id}/analyze/power-flow` | Run power flow |
+| `POST` | `/api/v1/grids/{id}/what-if` | Renewable scenario (non-destructive) |
+| `POST` | `/api/v1/grids/{id}/stress` | Full stress analysis |
+| `POST` | `/api/v1/analyses/{id}/mitigation-tests` | Test mitigations |
+| `GET` | `/api/v1/case-studies` | List case studies |
+| `POST` | `/api/v1/case-studies/{id}/run` | Execute case study |
+| `POST` | `/api/v1/demo/reset` | Reset demo state |
 
-## Known limitations (Phase 1)
+---
 
-- In-memory persistence only (acceptable for the MVP).
-- No PV reactive-power limit enforcement.
-- Solar/wind generators are fixed active-power sources; no weather/forecasting.
-- Line thermal limits treated as MVA ratings.
-- The Scilab engine is untested against a real Scilab installation.
-- Single slack bus and connected-network checks are enforced but the solver
-  assumes the network is radial/balanced and small.
+## Testing
 
-## Roadmap (suggested Phase 2)
+```bash
+# Backend tests (66 tests)
+cd backend && python -m pytest tests/ -v
 
-1. Enforce generator reactive-power limits with a Q-limits loop.
-2. Optimize the solver with NumPy vectorization for larger networks.
-3. Add line/breaker contingencies and N-1 screening.
-4. Renewable scenario sweeps (multi-scenario power flow).
-5. Optimal power flow for capacity/placement recommendations.
-6. Persistent storage and grid versioning.
+# E2E tests (6 tests)
+cd backend && python -m pytest tests/test_e2e.py -v
+
+# Frontend tests (41 tests across 8 suites)
+cd frontend && npm test
+
+# Frontend typecheck
+cd frontend && npm run typecheck
+
+# Release verification (requires running backend)
+python scripts/verify_release.py
+```
+
+See [`docs/TEST_RESULTS.md`](docs/TEST_RESULTS.md) for full results.
+
+---
+
+## Limitations
+
+- **In-memory persistence** — data is lost on server restart (acceptable for demo)
+- **No PV reactive-power limit enforcement** — PV buses do not switch to PQ when Q limits are hit
+- **Single-instant analysis** — no time-series or 24-hour dispatch profiles
+- **No transformer modeling** — all lines are simple Pi-model branches
+- **N-1 contingency not implemented** — single operating point analysis only
+- **Scilab untested against real installation** — Python engine is fully validated
+
+See [`docs/SUBMISSION.md`](docs/SUBMISSION.md) for full future scope.
+
+---
+
+## Project Structure
+
+```
+sci/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                    # FastAPI app, CORS, lifespan
+│   │   ├── api/routes/                # HTTP endpoints
+│   │   │   ├── grid.py                # Grid CRUD
+│   │   │   ├── analysis.py            # Power flow + engine status
+│   │   │   ├── scenarios.py           # Scenario management
+│   │   │   ├── stress.py              # Stress analysis + mitigations
+│   │   │   ├── case_studies.py        # Case study execution
+│   │   │   ├── health.py              # Health check
+│   │   │   └── demo.py                # Demo reset
+│   │   ├── domain/                    # Bus, Generator, Load, GridModel
+│   │   ├── power_system/              # Newton-Raphson, Y-bus, stress
+│   │   ├── scilab/                    # Scilab runner + scripts
+│   │   ├── services/                  # Business logic
+│   │   ├── schemas/                   # Pydantic DTOs
+│   │   ├── config/                    # Thresholds
+│   │   └── core/                      # Config, exceptions, logging
+│   ├── examples/
+│   │   ├── sample_grid.json           # 5-bus sample network
+│   │   ├── demo_grid.json             # Wind + battery demo network
+│   │   └── case_studies/              # 5 case study directories
+│   ├── tests/                         # 66 pytest tests
+│   ├── scripts/                       # generate_case_studies.py, smoke_test.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── api/                       # HTTP clients
+│   │   ├── components/workspace/      # UI panels and canvas
+│   │   ├── state/                     # React context providers
+│   │   ├── lib/                       # Utilities
+│   │   └── types.ts                   # Shared TypeScript types
+│   └── tests/                         # 41 Vitest tests
+├── docs/
+│   ├── API_CONTRACT.md
+│   ├── RELEASE_AUDIT.md
+│   ├── DEMO_FALLBACK.md
+│   ├── TEST_RESULTS.md
+│   └── SUBMISSION.md
+├── scripts/
+│   └── verify_release.py              # Release verification
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── docker-compose.yml
+├── nginx.conf
+└── .env.example
+```
