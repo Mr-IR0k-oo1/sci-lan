@@ -13,6 +13,11 @@ def create_grid(grid: GridModel) -> GridResponse:
     return grid_service.get_grid(grid_id)
 
 
+@router.get("/grids", response_model=list[GridResponse])
+def list_grids() -> list[GridResponse]:
+    return grid_service.list_grids()
+
+
 @router.get("/grids/{grid_id}", response_model=GridResponse)
 def get_grid(grid_id: str) -> GridResponse:
     return grid_service.get_grid(grid_id)

@@ -23,6 +23,12 @@ def create_scenario(grid_id: str, request: ScenarioCreateRequest) -> Scenario:
     return scenario_service.create_scenario(grid_id, request)
 
 
+@router.get("/grids/{grid_id}/scenarios/{scenario_id}", response_model=Scenario)
+def get_scenario(grid_id: str, scenario_id: str) -> Scenario:
+    grid_service.get_grid(grid_id)
+    return scenario_service.get_scenario(grid_id, scenario_id)
+
+
 @router.post(
     "/grids/{grid_id}/scenarios/{scenario_id}/analyze",
     response_model=PowerFlowResult,

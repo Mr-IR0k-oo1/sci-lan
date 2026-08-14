@@ -1,0 +1,44 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# environment scaffolder artifacts (keep out of version control)
+src/lib/user.ts
+src/lib/all_models_imports_placeholder.ts
+src/lib/types.ts
+src/lib/analysis.ts
+src/lib/client.ts
+src/lib/engine.ts
+src/lib/grid.ts
+src/lib/scenario.ts
