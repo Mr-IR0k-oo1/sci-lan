@@ -18,6 +18,11 @@ def get_grid(grid_id: str) -> GridResponse:
     return grid_service.get_grid(grid_id)
 
 
+@router.put("/grids/{grid_id}", response_model=GridResponse)
+def update_grid(grid_id: str, grid: GridModel) -> GridResponse:
+    return grid_service.update_grid(grid_id, grid)
+
+
 @router.post("/grids/{grid_id}/validate", response_model=ValidationResponse)
 def validate_grid(grid_id: str) -> ValidationResponse:
     grid = grid_service.get_grid(grid_id)

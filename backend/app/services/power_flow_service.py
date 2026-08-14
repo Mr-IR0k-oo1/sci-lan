@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import time
+
 from app.core.config import Settings, settings as default_settings
 from app.core.exceptions import InvalidEngine, InvalidGrid, PowerFlowDidNotConverge
 from app.domain.models import GridModel
@@ -27,12 +31,19 @@ def run_power_flow(
             f"Power-flow engine '{engine_name or settings.default_engine}' is not available."
         )
 
+    started = time.perf_counter()
     try:
-        return engine.run(
+        result = engine.run(
             grid,
             tolerance or settings.tolerance,
             max_iterations or settings.max_iterations,
             settings,
         )
     except PowerFlowDidNotConverge as exc:
-        return build_failed_result(grid, engine.name, exc.iterations, exc.max_mismatch)
+        failed = build_failed_result(grid, engine.name, exc.iterations, exc.max_mismatch)
+        failed.execution_time_ms = (time.perf_counter() - started) * 1000.0
+        return failed
+
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    result.execution_time_ms = elapsed_ms
+    return result

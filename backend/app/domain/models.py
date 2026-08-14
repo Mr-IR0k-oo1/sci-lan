@@ -36,6 +36,7 @@ class Generator(BaseModel):
     active_power_max: float = 1000.0
     reactive_power_min: float = -1000.0
     reactive_power_max: float = 1000.0
+    capacity_mwh: float = 0.0
 
 
 class Load(BaseModel):

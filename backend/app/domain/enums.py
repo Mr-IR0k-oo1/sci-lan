@@ -11,6 +11,13 @@ class GeneratorType(str, Enum):
     CONVENTIONAL = "CONVENTIONAL"
     SOLAR = "SOLAR"
     WIND = "WIND"
+    STORAGE = "STORAGE"
+
+
+class StorageState(str, Enum):
+    IDLE = "IDLE"
+    CHARGING = "CHARGING"
+    DISCHARGING = "DISCHARGING"
 
 
 class BusStatus(str, Enum):

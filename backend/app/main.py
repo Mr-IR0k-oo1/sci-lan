@@ -1,7 +1,9 @@
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.routes import analysis, grid
+from app.api.routes import analysis, grid, scenarios
 from app.core.config import settings
 from app.core.exceptions import (
     GridFlexError,
@@ -21,11 +23,18 @@ app = FastAPI(
 
 app.include_router(grid.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
+app.include_router(scenarios.router, prefix="/api/v1")
 
 
 @app.on_event("startup")
-def _load_sample_grid() -> None:
+def _load_example_grids() -> None:
     grid_service.load_sample_grid(settings.sample_grid_path)
+    demo_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "examples",
+        "demo_grid.json",
+    )
+    grid_service.load_sample_grid(demo_path)
 
 
 def _error_response(status_code: int, code: str, message: str, extra: dict | None = None) -> JSONResponse:

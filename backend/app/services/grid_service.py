@@ -20,6 +20,14 @@ def get_grid(grid_id: str) -> GridModel:
     return _storage[grid_id]
 
 
+def update_grid(grid_id: str, grid: GridModel) -> GridModel:
+    if grid_id not in _storage:
+        raise GridNotFound(grid_id)
+    updated = grid.model_copy(update={"grid_id": grid_id})
+    _storage[grid_id] = updated
+    return updated
+
+
 def list_grids() -> list[GridModel]:
     return list(_storage.values())
 

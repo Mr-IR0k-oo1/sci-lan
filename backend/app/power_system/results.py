@@ -2,8 +2,9 @@ import numpy as np
 from pydantic import BaseModel
 
 from app.core.config import Settings
-from app.domain.enums import BusStatus, BusType, LineStatus
+from app.domain.enums import BusStatus, BusType, GeneratorType, LineStatus
 from app.domain.models import GridModel
+from app.power_system.impact_score import GridImpactScore, compute_impact_score
 from app.power_system.per_unit import power_from_per_unit
 from app.power_system.power_flow import PowerFlowSolution, _power_injections
 from app.power_system.ybus import YBus
@@ -32,10 +33,12 @@ class LineResult(BaseModel):
 
 class PowerFlowSummary(BaseModel):
     total_generation_mw: float
+    renewable_generation_mw: float
     total_load_mw: float
     total_losses_mw: float
     minimum_voltage_pu: float
     maximum_voltage_pu: float
+    maximum_line_loading: float
     overloaded_lines: int
 
 
@@ -46,9 +49,11 @@ class PowerFlowResult(BaseModel):
     converged: bool
     iterations: int
     max_mismatch: float
+    execution_time_ms: float = 0.0
     buses: list[BusResult]
     lines: list[LineResult]
     summary: PowerFlowSummary | None
+    impact_score: GridImpactScore | None = None
 
 
 def _bus_status(voltage_pu: float, settings: Settings) -> BusStatus:
@@ -149,15 +154,34 @@ def build_power_flow_result(
         gen.active_power for gen in grid.generators if gen.bus_id != grid.buses[slack_index].id
     )
     total_generation = slack_generation + other_generation
+    renewable_generation = sum(
+        gen.active_power
+        for gen in grid.generators
+        if gen.type in (GeneratorType.SOLAR, GeneratorType.WIND)
+    )
     total_load = sum(load.active_power for load in grid.loads)
+    maximum_loading = max(
+        (line.loading_percentage for line in line_results), default=0.0
+    )
 
     summary = PowerFlowSummary(
         total_generation_mw=total_generation,
+        renewable_generation_mw=renewable_generation,
         total_load_mw=total_load,
         total_losses_mw=total_generation - total_load,
         minimum_voltage_pu=float(np.min(voltage)),
         maximum_voltage_pu=float(np.max(voltage)),
+        maximum_line_loading=float(maximum_loading),
         overloaded_lines=sum(1 for r in line_results if r.status == LineStatus.OVERLOADED),
+    )
+    impact_score = compute_impact_score(
+        minimum_voltage_pu=summary.minimum_voltage_pu,
+        maximum_voltage_pu=summary.maximum_voltage_pu,
+        maximum_line_loading=float(maximum_loading),
+        overloaded_lines=summary.overloaded_lines,
+        total_losses_mw=summary.total_losses_mw,
+        total_load_mw=summary.total_load_mw,
+        settings=settings,
     )
 
     return PowerFlowResult(
@@ -170,6 +194,7 @@ def build_power_flow_result(
         buses=bus_results,
         lines=line_results,
         summary=summary,
+        impact_score=impact_score,
     )
 
 
