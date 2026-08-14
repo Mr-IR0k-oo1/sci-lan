@@ -1,6 +1,12 @@
 import { vi } from 'vitest';
 import { API_BASE } from '../src/api/client';
-import type { ApiErrorDetail, GridModel, PowerFlowResult } from '../src/types';
+import type {
+  AnalysisRecord,
+  ApiErrorDetail,
+  GridModel,
+  PowerFlowResult,
+  StressAnalysisResult,
+} from '../src/types';
 
 export const sampleGrid: GridModel = {
   grid_id: 'sample',
@@ -135,3 +141,219 @@ export function baseRoutes() {
     'GET /grids/sample/scenarios': () => ({ status: 200, body: [] }),
   };
 }
+
+export const healthyStress: StressAnalysisResult = {
+  analysis_id: 'analysis-1',
+  grid_id: 'sample',
+  score: {
+    overall_score: 8.0,
+    classification: 'LOW',
+    components: [
+      { key: 'voltage', label: 'Voltage', score: 0, reason: 'All bus voltages within limits.' },
+      { key: 'transmission', label: 'Transmission', score: 0, reason: 'All lines within limits.' },
+      { key: 'generation', label: 'Generation', score: 0, reason: 'Generation balanced.' },
+      { key: 'renewable', label: 'Renewable Impact', score: 80, reason: 'No renewables.' },
+    ],
+    reasons: ['Stress score is LOW (8/100) from 0 contributing component(s).'],
+  },
+  buses: [
+    { bus_id: 'B1', bus_name: 'Slack', voltage_pu: 1.06, classification: 'NORMAL', severity: 'NORMAL', deviation_from_nominal: 0.06, deviation_from_limit: 0 },
+    { bus_id: 'B2', bus_name: 'PV1', voltage_pu: 1.04, classification: 'NORMAL', severity: 'NORMAL', deviation_from_nominal: 0.04, deviation_from_limit: 0 },
+  ],
+  lines: [
+    { line_id: 'L1', line_name: 'L1', from_bus: 'B1', to_bus: 'B2', loading_percentage: 30, thermal_limit: 100, status: 'NORMAL', severity: 'NORMAL', margin_remaining: 70 },
+  ],
+  generation: {
+    total_generation_mw: 117.5,
+    total_load_mw: 115,
+    total_losses_mw: 2.5,
+    slack_generation_mw: 17.5,
+    slack_max_mw: 300,
+    available_reserve_mw: 282.5,
+    renewable_generation_mw: 0,
+    detections: [],
+    generators_at_limit: [],
+    status: 'BALANCED',
+    severity: 'NORMAL',
+  },
+  renewable: {
+    renewable_penetration: 0,
+    renewable_generation_mw: 0,
+    impact_level: 'NEUTRAL',
+    new_violations: [],
+    resolved_violations: [],
+    reason: 'No renewable generation present in this analysis.',
+  },
+  issues: [],
+};
+
+export const stressedAnalysis: AnalysisRecord = {
+  id: 'analysis-2',
+  grid_id: 'sample',
+  scenario_id: null,
+  engine: 'python',
+  timestamp: '2026-01-01T00:00:00Z',
+  grid: sampleGrid,
+  result: sampleResult,
+  stress: {
+    ...healthyStress,
+    analysis_id: 'analysis-2',
+    score: {
+      overall_score: 62.5,
+      classification: 'MODERATE',
+      components: [
+        { key: 'voltage', label: 'Voltage', score: 55, reason: 'Worst voltage stress at Bus B4.' },
+        { key: 'transmission', label: 'Transmission', score: 80, reason: 'Line L1 overloaded.' },
+        { key: 'generation', label: 'Generation', score: 20, reason: 'Slack near limit.' },
+        { key: 'renewable', label: 'Renewable Impact', score: 60, reason: 'High renewable penetration.' },
+      ],
+      reasons: [
+        'Stress score is MODERATE (62.5/100) from 3 contributing component(s).',
+        'Line L1 overloaded.',
+      ],
+    },
+    buses: [
+      { bus_id: 'B4', bus_name: 'Load A', voltage_pu: 0.88, classification: 'UNDER_VOLTAGE', severity: 'CRITICAL', deviation_from_nominal: 0.12, deviation_from_limit: 0.07 },
+      { bus_id: 'B5', bus_name: 'Load B', voltage_pu: 0.99, classification: 'NORMAL', severity: 'NORMAL', deviation_from_nominal: 0.01, deviation_from_limit: 0 },
+    ],
+    lines: [
+      { line_id: 'L1', line_name: 'L1', from_bus: 'B1', to_bus: 'B2', loading_percentage: 118, thermal_limit: 60, status: 'OVERLOADED', severity: 'CRITICAL', margin_remaining: -18 },
+    ],
+    generation: {
+      total_generation_mw: 260,
+      total_load_mw: 270,
+      total_losses_mw: 10,
+      slack_generation_mw: 300,
+      slack_max_mw: 300,
+      available_reserve_mw: 0,
+      renewable_generation_mw: 120,
+      detections: ['GENERATION_INSUFFICIENT', 'GENERATOR_AT_LIMIT'],
+      generators_at_limit: ['G1'],
+      status: 'AT_LIMIT',
+      severity: 'CRITICAL',
+    },
+    renewable: {
+      renewable_penetration: 44.4,
+      renewable_generation_mw: 120,
+      impact_level: 'HIGH_RISK',
+      new_violations: ['VOLTAGE_STRESS:BUS:B4'],
+      resolved_violations: [],
+      reason: 'Renewable scenario introduced 1 new violation(s) without resolving any.',
+    },
+    issues: [
+      {
+        id: 'issue_001',
+        category: 'VOLTAGE_STRESS',
+        severity: 'CRITICAL',
+        affected_component_type: 'BUS',
+        affected_component_id: 'B4',
+        title: 'Bus undervoltage',
+        description: 'Bus voltage 0.880 pu is below the configured lower limit.',
+        evidence: { voltage_pu: 0.88, normal_low: 0.95 },
+        detected_from: 'power_flow',
+      },
+      {
+        id: 'issue_002',
+        category: 'TRANSMISSION_STRESS',
+        severity: 'CRITICAL',
+        affected_component_type: 'LINE',
+        affected_component_id: 'L1',
+        title: 'Transmission line overloaded',
+        description: 'Line loading exceeds its configured thermal limit.',
+        evidence: { loading_percentage: 118 },
+        detected_from: 'power_flow',
+      },
+      {
+        id: 'issue_003',
+        category: 'GENERATION_BALANCE',
+        severity: 'CRITICAL',
+        affected_component_type: 'SYSTEM',
+        affected_component_id: null,
+        title: 'Generation may be insufficient',
+        description: 'Available generation is at or near its maximum capacity.',
+        evidence: { slack_generation_mw: 300 },
+        detected_from: 'power_flow',
+      },
+    ],
+  },
+  recommendations: [
+    {
+      id: 'rec_001',
+      title: 'Add shunt compensation to support voltage',
+      category: 'voltage',
+      priority: 'HIGH',
+      description: 'Add shunt capacitors or adjust transformer taps to raise voltage at buses: B4.',
+      reason: 'Add shunt capacitors or adjust transformer taps to raise voltage at buses: B4.',
+      related_issue_ids: ['issue_001'],
+      suggested_actions: ['Install shunt capacitor banks at the affected buses.'],
+      expected_effect: ['Raise the affected bus voltages back into the normal band.'],
+      confidence: 'HIGH',
+    },
+    {
+      id: 'rec_002',
+      title: 'Reduce load on overloaded transmission lines',
+      category: 'transmission',
+      priority: 'HIGH',
+      description: 'Dispatch generation or curtail load to reduce flow on overloaded lines: L1.',
+      reason: 'Dispatch generation or curtail load to reduce flow on overloaded lines: L1.',
+      related_issue_ids: ['issue_002'],
+      suggested_actions: ['Curtail the most sensitive loads.'],
+      expected_effect: ['Bring line loading below the configured thermal limit.'],
+      confidence: 'HIGH',
+    },
+    {
+      id: 'rec_003',
+      title: 'Add storage or stability controls for renewable integration',
+      category: 'renewable',
+      priority: 'MEDIUM',
+      description: 'Renewable integration introduces or worsens violations.',
+      reason: 'Renewable integration introduces or worsens violations.',
+      related_issue_ids: [],
+      suggested_actions: ['Add battery storage.'],
+      expected_effect: ['Neutralize new violations.'],
+      confidence: 'MEDIUM',
+    },
+  ],
+  mitigation_candidates: [
+    {
+      id: 'mitigation_001',
+      recommendation_id: 'rec_002',
+      name: 'Curtail load feeding Line 1-2',
+      description: 'Curtail load D1 to reduce flow on line L1.',
+      modifications: [{ type: 'LOAD_CURTAILMENT', new_value: 32.5, generator_id: null, load_id: 'D1' }],
+      expected_target: 'Transmission line overload',
+    },
+  ],
+  mitigation_tests: [],
+};
+
+export const mitigationTestResult = {
+  id: 'test_mitigation_001',
+  analysis_id: 'analysis-2',
+  mitigation_id: 'mitigation_001',
+  mitigation_name: 'Curtail load feeding Line 1-2',
+  converged: true,
+  before_score: 62.5,
+  before_classification: 'MODERATE',
+  after_score: 38.2,
+  after_classification: 'LOW',
+  resolved_issues: [
+    {
+      id: 'issue_002',
+      category: 'TRANSMISSION_STRESS',
+      severity: 'CRITICAL',
+      affected_component_type: 'LINE',
+      affected_component_id: 'L1',
+      title: 'Transmission line overloaded',
+      description: 'Line loading exceeds its configured thermal limit.',
+      evidence: {},
+      detected_from: 'power_flow',
+    },
+  ],
+  remaining_issues: [],
+  new_issues: [],
+  metric_changes: [
+    { metric: 'Stress score', before: 62.5, after: 38.2, unit: '', improvement: true },
+  ],
+  notes: 'Mitigation improved the stress score.',
+};

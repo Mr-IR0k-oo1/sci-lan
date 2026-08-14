@@ -3,9 +3,10 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.routes import analysis, grid, scenarios
+from app.api.routes import analysis, grid, scenarios, stress
 from app.core.config import settings
 from app.core.exceptions import (
+    AnalysisNotFound,
     GridFlexError,
     GridNotFound,
     InvalidEngine,
@@ -24,6 +25,7 @@ app = FastAPI(
 app.include_router(grid.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(scenarios.router, prefix="/api/v1")
+app.include_router(stress.router, prefix="/api/v1")
 
 
 @app.on_event("startup")
@@ -47,6 +49,11 @@ def _error_response(status_code: int, code: str, message: str, extra: dict | Non
 @app.exception_handler(GridNotFound)
 async def _grid_not_found(_request: Request, exc: GridNotFound) -> JSONResponse:
     return _error_response(404, "grid_not_found", str(exc))
+
+
+@app.exception_handler(AnalysisNotFound)
+async def _analysis_not_found(_request: Request, exc: AnalysisNotFound) -> JSONResponse:
+    return _error_response(404, "analysis_not_found", str(exc))
 
 
 @app.exception_handler(InvalidGrid)

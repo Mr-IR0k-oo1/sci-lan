@@ -4,6 +4,7 @@ import { GridProvider, useGrid } from '../../state/GridContext';
 import { AnalysisProvider, useAnalysis } from '../../state/AnalysisContext';
 import { ScenarioProvider, useScenario } from '../../state/ScenarioContext';
 import { WhatIfProvider } from '../../state/WhatIfContext';
+import { StressProvider } from '../../state/StressContext';
 import { SelectionProvider, useSelection } from '../../state/SelectionContext';
 import { TopBar } from './TopBar';
 import { ComponentPalette } from './ComponentPalette';
@@ -12,6 +13,7 @@ import { ValidationPanel } from './ValidationPanel';
 import { ScenarioPanel } from './ScenarioPanel';
 import { WhatIfPanel } from './WhatIfPanel';
 import { AnalysisResultsPanel } from './AnalysisResultsPanel';
+import { StressResultsPanel } from './StressResultsPanel';
 import { GridCanvas } from './GridCanvas';
 
 function WorkspaceInner() {
@@ -135,6 +137,7 @@ function WorkspaceInner() {
       </div>
 
       <AnalysisResultsPanel result={analysis.result} status={analysis.status} error={analysis.error} />
+      <StressResultsPanel onSelect={onSelect} />
     </div>
   );
 }
@@ -146,7 +149,9 @@ export function Workspace() {
         <ScenarioProvider>
           <AnalysisProvider>
             <WhatIfProvider>
-              <WorkspaceInner />
+              <StressProvider>
+                <WorkspaceInner />
+              </StressProvider>
             </WhatIfProvider>
           </AnalysisProvider>
         </ScenarioProvider>

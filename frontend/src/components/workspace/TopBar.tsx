@@ -1,7 +1,8 @@
 import { useGrid } from '../../state/GridContext';
 import { useAnalysis } from '../../state/AnalysisContext';
+import { useStress } from '../../state/StressContext';
 import { Button, Spinner } from '../ui';
-import { PlusIcon, PlayIcon, SaveIcon } from '../icons';
+import { PlayIcon, PlusIcon, SaveIcon } from '../icons';
 
 export function TopBar() {
   const {
@@ -16,8 +17,10 @@ export function TopBar() {
     saveGrid,
   } = useGrid();
   const { status, runAnalysis, error } = useAnalysis();
+  const stress = useStress();
 
   const running = status === 'validating' || status === 'running';
+  const stressRunning = stress.status === 'running';
 
   return (
     <header className="topbar">
@@ -63,6 +66,15 @@ export function TopBar() {
         <Button variant="primary" icon={<PlayIcon />} disabled={!gridId || running} onClick={() => void runAnalysis()}>
           {running ? 'Analyzing…' : 'Run Analysis'}
         </Button>
+
+        <Button
+          variant="secondary"
+          icon={<PlayIcon />}
+          disabled={!gridId || stressRunning}
+          onClick={() => void stress.runStress()}
+        >
+          {stressRunning ? 'Stress…' : 'Stress'}
+        </Button>
       </div>
 
       {loading ? (
@@ -73,6 +85,11 @@ export function TopBar() {
       {status === 'failed' || status === 'error' ? (
         <p className="topbar-error" role="alert">
           {error}
+        </p>
+      ) : null}
+      {stress.error ? (
+        <p className="topbar-error" role="alert">
+          {stress.error}
         </p>
       ) : null}
     </header>

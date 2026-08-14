@@ -34,3 +34,9 @@ class ScilabUnavailable(GridFlexError):
 class InvalidEngine(GridFlexError):
     def __init__(self, message: str):
         super().__init__(message)
+
+
+class AnalysisNotFound(GridFlexError):
+    def __init__(self, analysis_id: str):
+        self.analysis_id = analysis_id
+        super().__init__(f"Analysis '{analysis_id}' was not found.")

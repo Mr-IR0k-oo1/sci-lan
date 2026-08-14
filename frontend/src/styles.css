@@ -766,3 +766,276 @@ select:focus-visible,
 .bar-warning {
   background: #f59e0b;
 }
+
+/* --- Stress analysis panels ------------------------------------------------ */
+
+.stress-health {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stress-score-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+  background: #eff6ff;
+}
+
+.stress-score-value {
+  display: block;
+  font-size: 36px;
+  font-weight: 800;
+  color: #1e40af;
+}
+
+.stress-score-summary {
+  font-size: 12px;
+  color: #334155;
+  margin: 8px 0 0;
+}
+
+.stress-counts {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.stress-component {
+  margin-bottom: 10px;
+}
+
+.stress-component-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.stress-component-reason {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.stress-detections {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.stress-renewable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.stress-new-violations {
+  margin-top: 4px;
+}
+
+.stress-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stress-issue {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.stress-issue-critical {
+  border-left: 4px solid #dc2626;
+}
+
+.stress-issue-warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.stress-issue-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stress-issue-header .issue-icon {
+  color: #dc2626;
+}
+
+.stress-issue-description {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.stress-issue-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.issue-evidence {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.issue-evidence-key {
+  font-weight: 600;
+  color: #334155;
+}
+
+.stress-recommendations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stress-recommendation {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.stress-recommendation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stress-recommendation-description {
+  margin: 6px 0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.stress-actions {
+  margin-top: 6px;
+}
+
+.stress-actions ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.stress-subheading {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #64748b;
+}
+
+.stress-recommendation-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.mitigation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mitigation-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mitigation-candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mitigation-candidate {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.mitigation-candidate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mitigation-candidate-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.mitigation-test {
+  margin-top: 8px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 8px;
+}
+
+.mitigation-test-failed {
+  border-top-color: #fca5a5;
+}
+
+.mitigation-test-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mitigation-scores {
+  width: auto;
+}
+
+.mitigation-scores .status-ok,
+.mitigation-scores .status-warn {
+  background: none;
+  padding: 0;
+  font-weight: 700;
+}
+
+.mitigation-outcome {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #15803d;
+}
+
+.mitigation-outcome-warn {
+  color: #b45309;
+}
+
+.mitigation-outcome-bad {
+  color: #b91c1c;
+}
