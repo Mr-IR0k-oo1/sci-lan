@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useGrid } from '../../state/GridContext';
 import { useAnalysis } from '../../state/AnalysisContext';
 import { useStress } from '../../state/StressContext';
 import { Button, Spinner } from '../ui';
 import { PlayIcon, PlusIcon, SaveIcon } from '../icons';
+import { EngineStatus } from './EngineStatus';
+import { CaseStudiesModal } from './CaseStudiesModal';
 
 export function TopBar() {
   const {
@@ -19,6 +22,8 @@ export function TopBar() {
   const { status, runAnalysis, error } = useAnalysis();
   const stress = useStress();
 
+  const [showCaseStudies, setShowCaseStudies] = useState(false);
+
   const running = status === 'validating' || status === 'running';
   const stressRunning = stress.status === 'running';
 
@@ -27,6 +32,12 @@ export function TopBar() {
       <h1 className="app-title">GridFlex</h1>
 
       <div className="topbar-controls">
+        <EngineStatus />
+        
+        <Button variant="secondary" onClick={() => setShowCaseStudies(true)}>
+          Case Studies
+        </Button>
+
         <label className="field inline-field">
           <span className="field-label">Grid</span>
           <select
@@ -92,6 +103,8 @@ export function TopBar() {
           {stress.error}
         </p>
       ) : null}
+      
+      {showCaseStudies && <CaseStudiesModal onClose={() => setShowCaseStudies(false)} />}
     </header>
   );
 }

@@ -44,7 +44,10 @@ class PowerFlowSummary(BaseModel):
 
 class PowerFlowResult(BaseModel):
     grid_id: str
+    analysis_id: str | None = None
+    input_hash: str | None = None
     engine: str
+    engine_version: str | None = None
     status: str
     converged: bool
     iterations: int
@@ -95,11 +98,13 @@ def build_power_flow_result(
     solution: PowerFlowSolution,
     engine_name: str,
     settings: Settings,
+    engine_version: str | None = None,
 ) -> PowerFlowResult:
     if not solution.converged:
         return PowerFlowResult(
             grid_id=grid.grid_id,
             engine=engine_name,
+            engine_version=engine_version,
             status="not_converged",
             converged=False,
             iterations=solution.iterations,
@@ -187,6 +192,7 @@ def build_power_flow_result(
     return PowerFlowResult(
         grid_id=grid.grid_id,
         engine=engine_name,
+        engine_version=engine_version,
         status="success",
         converged=True,
         iterations=solution.iterations,
@@ -203,10 +209,12 @@ def build_failed_result(
     engine_name: str,
     iterations: int | None,
     max_mismatch: float | None,
+    engine_version: str | None = None,
 ) -> PowerFlowResult:
     return PowerFlowResult(
         grid_id=grid.grid_id,
         engine=engine_name,
+        engine_version=engine_version,
         status="not_converged",
         converged=False,
         iterations=iterations or 0,

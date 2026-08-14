@@ -1,0 +1,6 @@
+{
+  "id": "battery_support",
+  "name": "Battery Support",
+  "description": "Demonstrate storage as a scenario tool.",
+  "objective": "Compare renewable only vs renewable plus battery."
+}

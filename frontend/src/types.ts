@@ -112,6 +112,8 @@ export interface GridImpactScore {
 
 export interface PowerFlowResult {
   grid_id: string;
+  analysis_id: string;
+  input_hash: string;
   engine: string;
   status: string;
   converged: boolean;
@@ -147,10 +149,50 @@ export interface EngineRegistry {
   default_engine: string;
 }
 
+export interface ScilabStatus {
+  available: boolean;
+  version: string | null;
+  executable_path: string | null;
+  health_check: string;
+  supported_operations: string[];
+  last_checked: string | null;
+  message: string;
+}
+
+export interface EngineRunInfo {
+  available: boolean;
+  converged: boolean | null;
+  engine_version: string | null;
+  execution_time_ms: number | null;
+  error: string | null;
+}
+
+export interface EngineComparison {
+  voltage_difference_max: number;
+  angle_difference_max: number;
+  line_flow_difference_max: number;
+  within_tolerance: boolean;
+}
+
+export interface EngineComparisonResponse {
+  python: EngineRunInfo | null;
+  scilab: EngineRunInfo;
+  comparison: EngineComparison | null;
+}
+
 export interface PowerFlowRequest {
   engine?: string;
   tolerance?: number;
   max_iterations?: number;
+}
+
+export interface CompareEnginesRequest {
+  grid: GridModel;
+  tolerance?: number;
+  max_iterations?: number;
+  voltage_tolerance?: number;
+  angle_tolerance_deg?: number;
+  flow_tolerance_pu?: number;
 }
 
 export interface WhatIfRequest {

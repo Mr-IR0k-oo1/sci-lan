@@ -49,6 +49,8 @@ export const scenarioGrid: GridModel = {
 
 export const sampleResult: PowerFlowResult = {
   grid_id: 'sample',
+  analysis_id: 'test-analysis-001',
+  input_hash: 'abc123def456',
   engine: 'python',
   status: 'success',
   converged: true,

@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: gridflex-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GRIDFLEX_DEFAULT_ENGINE=${GRIDFLEX_DEFAULT_ENGINE:-auto}
+      - GRIDFLEX_SCILAB_EXECUTABLE=${GRIDFLEX_SCILAB_EXECUTABLE:-}
+      - GRIDFLEX_SCILAB_TIMEOUT_SECONDS=${GRIDFLEX_SCILAB_TIMEOUT_SECONDS:-30}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: gridflex-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+# Scilab is NOT included in the container images. The Python engine is always
+# available. Scilab support requires installing Scilab in the host OS or a
+# custom image and setting GRIDFLEX_SCILAB_EXECUTABLE to the binary path.
+#
+# Development (without Docker):
+#   Backend:  cd backend && uvicorn app.main:app --reload --port 8000
+#   Frontend: cd frontend && npm run dev

@@ -1,0 +1,6 @@
+{
+  "id": "over_voltage",
+  "name": "Over-Voltage Condition",
+  "description": "Demonstrate excessive renewable generation causing measurable voltage impact.",
+  "objective": "Detect over-voltage issue and test mitigation."
+}

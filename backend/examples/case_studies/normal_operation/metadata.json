@@ -1,0 +1,6 @@
+{
+  "id": "normal_operation",
+  "name": "Normal Grid Operation",
+  "description": "Demonstrate a healthy grid with no critical violations.",
+  "objective": "Verify power flow convergence and baseline health."
+}

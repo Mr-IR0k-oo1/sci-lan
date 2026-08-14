@@ -1,0 +1,6 @@
+{
+  "id": "line_overload",
+  "name": "Line Overload",
+  "description": "Demonstrate transmission congestion.",
+  "objective": "Increase load to detect overloaded line and recommend mitigation options."
+}

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -12,13 +13,15 @@ import { describeError } from '../lib/errors';
 import type { PowerFlowResult, ValidationIssue } from '../types';
 import { useGrid } from './GridContext';
 
-export type AnalysisStatus = 'idle' | 'validating' | 'running' | 'success' | 'failed' | 'error';
+export type AnalysisStatus = 'idle' | 'validating' | 'running' | 'success' | 'failed' | 'error' | 'outdated';
 
 interface AnalysisContextValue {
   status: AnalysisStatus;
   result: PowerFlowResult | null;
   validationIssues: ValidationIssue[];
   error: string | null;
+  engine: string;
+  setEngine: (engine: string) => void;
   runAnalysis: () => Promise<void>;
 }
 
@@ -30,6 +33,14 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [result, setResult] = useState<PowerFlowResult | null>(null);
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [engine, setEngine] = useState<string>('auto');
+
+  // If the grid becomes dirty after a successful analysis, mark it as outdated
+  useEffect(() => {
+    if (dirty && (status === 'success' || status === 'failed')) {
+      setStatus('outdated');
+    }
+  }, [dirty, status]);
 
   const runAnalysis = useCallback(async () => {
     if (!gridId) {
@@ -57,7 +68,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     setValidationIssues([]);
     setStatus('running');
     try {
-      const powerResult = await analysisApi.runPowerFlow(gridId);
+      const powerResult = await analysisApi.runPowerFlow(gridId, { engine });
       setResult(powerResult);
       setStatus(powerResult.converged ? 'success' : 'failed');
       if (!powerResult.converged) {
@@ -67,11 +78,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       setError(describeError(caught));
       setStatus('error');
     }
-  }, [gridId, dirty, saveGrid]);
+  }, [gridId, dirty, saveGrid, engine]);
 
   const value = useMemo<AnalysisContextValue>(
-    () => ({ status, result, validationIssues, error, runAnalysis }),
-    [status, result, validationIssues, error, runAnalysis],
+    () => ({ status, result, validationIssues, error, engine, setEngine, runAnalysis }),
+    [status, result, validationIssues, error, engine, setEngine, runAnalysis],
   );
 
   return <AnalysisContext.Provider value={value}>{children}</AnalysisContext.Provider>;

@@ -1,236 +1,206 @@
-import os
-import re
+"""Safe Scilab runner.
+
+Executes the internal GridFlex Scilab scripts in an isolated temporary
+directory with an explicit argument list, a hard timeout, and strict structured
+output parsing. Never builds shell commands through string concatenation and
+never executes user-provided code.
+
+Pipeline:
+
+    GridModel -> normalized input variables (inputs.sci)
+              -> subprocess(scilab -nb -nw -e "exec('power_flow.sce')")
+              -> gridflex_results.txt (documented deterministic format, or JSON)
+              -> dict  (raw structured result)
+"""
+
+from __future__ import annotations
+
+import json
 import shutil
 import subprocess
-import tempfile
-from dataclasses import dataclass
+from typing import Any
 
-from app.core.config import Settings
-from app.core.exceptions import PowerFlowDidNotConverge, ScilabUnavailable
-from app.domain.enums import BusType
+from app.core.config import Settings, settings as default_settings
+from app.core.exceptions import ScilabUnavailable
 from app.domain.models import GridModel
-from app.power_system.per_unit import power_to_per_unit
-from app.power_system.results import PowerFlowResult, build_failed_result, build_power_flow_result
-from app.power_system.ybus import build_ybus
+from app.scilab import paths
+from app.scilab.capability import find_executable
+from app.scilab.input_format import render_scilab_input_variables
 
-SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
-SOLVER_SCRIPT = "power_flow.sci"
-MAIN_SCRIPT = "gridflex_main.sci"
-OUTPUT_FILE = "gridflex_output.txt"
-
-_TYPE_CODE = {BusType.SLACK: 1, BusType.PV: 2, BusType.PQ: 3}
-
-
-@dataclass
-class ScilabCapability:
-    available: bool
-    version: str | None
-    message: str
-
-
-def _find_executable() -> str | None:
-    for candidate in ("scilab-cli", "scilab"):
-        path = shutil.which(candidate)
-        if path:
-            return path
-    return None
-
-
-def detect_scilab() -> ScilabCapability:
-    executable = _find_executable()
-    if executable is None:
-        return ScilabCapability(
-            available=False,
-            version=None,
-            message="Scilab is not installed or not present on the PATH.",
-        )
-    try:
-        result = subprocess.run(
-            [executable, "-version"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return ScilabCapability(
-            available=False,
-            version=None,
-            message=f"Scilab executable was found but could not be run: {exc}",
-        )
-    output = f"{result.stdout}\n{result.stderr}".strip()
-    match = re.search(r"(\d+\.\d+\.\d+)", output)
-    version = match.group(1) if match else None
-    return ScilabCapability(available=True, version=version, message="Scilab is available.")
+_SCRIPTS = (
+    "build_ybus.sci",
+    "newton_raphson.sci",
+    "calculate_line_flows.sci",
+    "export_results.sci",
+    "power_flow.sce",
+)
 
 
 class ScilabRunner:
-    def __init__(self, executable: str | None = None):
-        self._executable = executable or _find_executable()
+    def __init__(
+        self,
+        executable: str | None = None,
+        timeout_seconds: int | None = None,
+    ):
+        self._executable = executable
+        self._timeout_seconds = timeout_seconds
 
     @property
     def executable(self) -> str | None:
         return self._executable
 
-    def _render_inputs(self, grid: GridModel, tolerance: float, max_iterations: int) -> str:
-        index = {bus.id: i for i, bus in enumerate(grid.buses)}
-        bus_type = [str(_TYPE_CODE[bus.type]) for bus in grid.buses]
-        bus_v0 = []
-        bus_theta0 = []
-        for bus in grid.buses:
-            if bus.type == BusType.SLACK:
-                bus_v0.append(str(bus.voltage_magnitude))
-                bus_theta0.append(str(bus.voltage_angle))
-            elif bus.type == BusType.PV:
-                bus_v0.append(str(bus.voltage_magnitude))
-                bus_theta0.append("0")
-            else:
-                bus_v0.append("1")
-                bus_theta0.append("0")
+    def _resolve(self, settings: Settings) -> str:
+        executable = self._executable or find_executable(settings)
+        if executable is None:
+            raise ScilabUnavailable(
+                "Scilab is not installed or not present on the PATH."
+            )
+        return executable
 
-        p_spec = [0.0] * len(grid.buses)
-        q_spec = [0.0] * len(grid.buses)
-        for gen in grid.generators:
-            i = index[gen.bus_id]
-            p_spec[i] += power_to_per_unit(gen.active_power, grid.base_mva)
-            q_spec[i] += power_to_per_unit(gen.reactive_power, grid.base_mva)
-        for load in grid.loads:
-            i = index[load.bus_id]
-            p_spec[i] -= power_to_per_unit(load.active_power, grid.base_mva)
-            q_spec[i] -= power_to_per_unit(load.reactive_power, grid.base_mva)
+    @staticmethod
+    def _timeout(settings: Settings) -> int:
+        return settings.scilab_timeout_seconds
 
-        line_rows = []
-        for line in grid.lines:
-            i = index[line.from_bus] + 1
-            j = index[line.to_bus] + 1
-            line_rows.append(f"{i} {j} {line.resistance} {line.reactance} {line.susceptance}")
-
-        return "\n".join(
-            [
-                f"base_mva = {grid.base_mva};",
-                f"tolerance = {tolerance};",
-                f"max_iterations = {max_iterations};",
-                f"bus_count = {len(grid.buses)};",
-                f"bus_type = [{', '.join(bus_type)}];",
-                f"bus_v0 = [{', '.join(bus_v0)}];",
-                f"bus_theta0 = [{', '.join(bus_theta0)}];",
-                f"bus_p_spec = [{', '.join(f'{v:.9g}' for v in p_spec)}];",
-                f"bus_q_spec = [{', '.join(f'{v:.9g}' for v in q_spec)}];",
-                f"line_count = {len(grid.lines)};",
-                "lines = [",
-                ";".join("[" + " ".join(row) + "]" for row in line_rows),
-                "];",
-            ]
+    def _prepare_workdir(self, workdir, grid: GridModel, tolerance: float, max_iterations: int) -> None:
+        (workdir / paths.INPUT_FILE).write_text(
+            render_scilab_input_variables(grid, tolerance, max_iterations)
         )
-
-    def _parse_output(self, text: str) -> tuple[bool, int, float, list[float], list[float]]:
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if len(lines) < 4:
-            raise ScilabUnavailable("Scilab produced an unreadable or empty output file.")
-        header = lines[0].split()
-        converged = int(float(header[0])) == 1
-        iterations = int(float(header[1]))
-        max_mismatch = float(header[2])
-        voltage = [float(v) for v in lines[1].split()]
-        angle_deg = [float(v) for v in lines[2].split()]
-        return converged, iterations, max_mismatch, voltage, angle_deg
+        for name in _SCRIPTS:
+            shutil.copy(paths.script(name), workdir / name)
 
     def solve(
         self,
         grid: GridModel,
         tolerance: float,
         max_iterations: int,
-        settings: Settings,
-    ) -> PowerFlowResult:
-        if self._executable is None:
-            raise ScilabUnavailable("Scilab is not installed or not present on the PATH.")
+        settings: Settings = default_settings,
+    ) -> dict[str, Any]:
+        """Run the Scilab power flow and return the raw structured result dict."""
+        executable = self._resolve(settings)
+        timeout = self._timeout(settings)
 
-        with tempfile.TemporaryDirectory() as workdir:
-            inputs_path = os.path.join(workdir, "gridflex_inputs.sci")
-            main_path = os.path.join(workdir, MAIN_SCRIPT)
-            solver_path = os.path.join(SCRIPTS_DIR, SOLVER_SCRIPT)
-            output_path = os.path.join(workdir, OUTPUT_FILE)
+        with paths.temporary_workdir() as workdir:
+            self._prepare_workdir(workdir, grid, tolerance, max_iterations)
+            output_path = workdir / paths.RESULT_FILE
 
-            with open(inputs_path, "w") as handle:
-                handle.write(self._render_inputs(grid, tolerance, max_iterations))
-
-            main_content = "\n".join(
-                [
-                    f"exec('{inputs_path}', -1);",
-                    f"exec('{solver_path}', -1);",
-                    "[converged, iterations, max_mismatch, V, theta] = gridflex_solve(..",
-                    "    base_mva, bus_type, bus_v0, bus_theta0, bus_p_spec, bus_q_spec, ..",
-                    "    lines, line_count, tolerance, max_iterations);",
-                    f"fd = mopen('{output_path}', 'w');",
-                    "mfprintf(fd, '%d %d %.9g\\n', converged, iterations, max_mismatch);",
-                    "mfprintf(fd, '%.9g ', V);",
-                    "mfprintf(fd, '\\n');",
-                    "mfprintf(fd, '%.9g ', theta * 180 / %pi);",
-                    "mfprintf(fd, '\\n');",
-                    "mclose(fd);",
-                    "exit;",
-                ]
-            )
-            with open(main_path, "w") as handle:
-                handle.write(main_content)
-
-            command = [self._executable, "-nb", "-e", f"exec('{main_path}')"]
+            # Explicit argument list; nothing is shell-interpolated.
+            command = [
+                executable,
+                "-nb",
+                "-nw",
+                "-e",
+                f"exec('{workdir / 'power_flow.sce'}', -1)",
+            ]
             try:
-                subprocess.run(command, capture_output=True, text=True, timeout=120, cwd=workdir)
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    cwd=str(workdir),
+                )
             except subprocess.TimeoutExpired as exc:
-                raise ScilabUnavailable(f"Scilab execution timed out: {exc}")
-            except OSError as exc:
-                raise ScilabUnavailable(f"Could not launch Scilab: {exc}")
-
-            if not os.path.exists(output_path):
                 raise ScilabUnavailable(
-                    "Scilab ran but produced no output file; the solve may have failed."
+                    f"Scilab execution timed out after {timeout} seconds."
+                ) from exc
+            except OSError as exc:
+                raise ScilabUnavailable(f"Could not launch Scilab: {exc}") from exc
+
+            if not output_path.exists():
+                detail = (result.stderr or "").strip().splitlines()[-1:] or [
+                    "no output produced"
+                ]
+                raise ScilabUnavailable(
+                    "Scilab produced no structured output; the solve failed "
+                    f"({detail[0]})."
                 )
 
-            with open(output_path) as handle:
-                converged, iterations, max_mismatch, voltage, angle_deg = self._parse_output(
-                    handle.read()
-                )
+            return parse_result_file(output_path.read_text())
 
-        if not converged:
-            raise PowerFlowDidNotConverge(
-                f"Scilab power flow did not converge after {iterations} iterations "
-                f"(max mismatch {max_mismatch:.3e}).",
-                max_mismatch=max_mismatch,
-                iterations=iterations,
-            )
 
-        import numpy as np
+def parse_result_file(text: str) -> dict[str, Any]:
+    """Parse a Scilab result file.
 
-        ybus = build_ybus(grid)
-        solution = build_power_flow_result(
-            grid,
-            ybus,
-            _solution_from(voltage, angle_deg, converged, iterations, max_mismatch),
-            self.name(),
-            settings,
+    Accepts the documented deterministic line format (v1) and JSON output, so
+    a future Scilab release that emits JSON keeps working unchanged.
+    """
+    stripped = text.lstrip()
+    if stripped.startswith("{"):
+        return _parse_json_result(stripped)
+    return _parse_line_format(stripped)
+
+
+def _parse_json_result(text: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ScilabUnavailable(
+            f"Scilab produced invalid JSON output: {exc}"
+        ) from exc
+    return payload
+
+
+def _parse_line_format(text: str) -> dict[str, Any]:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines or lines[0] != "gridflex_results v1":
+        raise ScilabUnavailable(
+            "Scilab produced an unrecognized output format "
+            "(expected 'gridflex_results v1')."
         )
-        return solution
 
-    @staticmethod
-    def name() -> str:
-        return "scilab"
+    def values_for(key: str, expected_count: int | None = None) -> list[float]:
+        for line in lines[1:]:
+            parts = line.split()
+            if parts and parts[0] == key:
+                values = [float(part) for part in parts[1:]]
+                if expected_count is not None and len(values) != expected_count:
+                    raise ScilabUnavailable(
+                        f"Scilab output line '{key}' has {len(values)} values; "
+                        f"expected {expected_count}."
+                    )
+                return values
+        raise ScilabUnavailable(f"Scilab output is missing the '{key}' section.")
 
+    try:
+        converged = int(values_for("converged", 1)[0]) == 1
+        iterations = int(values_for("iterations", 1)[0])
+        max_mismatch = values_for("max_mismatch", 1)[0]
+        bus_count = int(values_for("bus_count", 1)[0])
+        bus_v = values_for("bus_v", bus_count)
+        bus_theta_deg = values_for("bus_theta_deg", bus_count)
+        bus_p_pu = values_for("bus_p_pu", bus_count)
+        bus_q_pu = values_for("bus_q_pu", bus_count)
+        line_count = int(values_for("line_count", 1)[0])
+        line_flows = values_for("line_flows", line_count * 4)
+    except (ValueError, IndexError) as exc:
+        raise ScilabUnavailable(
+            f"Scilab output is malformed: {exc}"
+        ) from exc
 
-def _solution_from(
-    voltage: list[float],
-    angle_deg: list[float],
-    converged: bool,
-    iterations: int,
-    max_mismatch: float,
-):
-    from app.power_system.power_flow import PowerFlowSolution
-
-    import numpy as np
-
-    return PowerFlowSolution(
-        converged=converged,
-        iterations=iterations,
-        max_mismatch=max_mismatch,
-        voltage_magnitude=np.array(voltage),
-        voltage_angle=np.deg2rad(np.array(angle_deg)),
-    )
+    flows = [
+        {
+            "index": k,
+            "P_from_pu": line_flows[k * 4],
+            "Q_from_pu": line_flows[k * 4 + 1],
+            "P_to_pu": line_flows[k * 4 + 2],
+            "Q_to_pu": line_flows[k * 4 + 3],
+        }
+        for k in range(line_count)
+    ]
+    buses = [
+        {
+            "index": i,
+            "V": bus_v[i],
+            "theta_deg": bus_theta_deg[i],
+            "P_pu": bus_p_pu[i],
+            "Q_pu": bus_q_pu[i],
+        }
+        for i in range(bus_count)
+    ]
+    return {
+        "converged": converged,
+        "iterations": iterations,
+        "max_mismatch": max_mismatch,
+        "buses": buses,
+        "lines": flows,
+    }

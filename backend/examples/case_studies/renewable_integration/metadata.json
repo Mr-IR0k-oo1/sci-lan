@@ -1,0 +1,6 @@
+{
+  "id": "renewable_integration",
+  "name": "Renewable Integration",
+  "description": "Demonstrate increasing solar generation and its impact.",
+  "objective": "Show penetration changes, voltage changes, and line loading changes."
+}

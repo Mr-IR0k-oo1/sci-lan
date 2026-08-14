@@ -58,3 +58,33 @@ export const post = <T>(path: string, body: unknown): Promise<T> =>
 export const put = <T>(path: string, body: unknown): Promise<T> =>
   request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
 export const del = <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' });
+
+export async function download(
+  path: string,
+  filename: string,
+  init?: RequestInit,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, init);
+  if (!response.ok) {
+    let detail: ApiErrorDetail = {
+      code: 'http_error',
+      message: `Request failed with status ${response.status}.`,
+    };
+    try {
+      const body = (await response.json()) as { detail?: ApiErrorDetail };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // keep the default detail
+    }
+    throw new ApiRequestError(response.status, detail);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}

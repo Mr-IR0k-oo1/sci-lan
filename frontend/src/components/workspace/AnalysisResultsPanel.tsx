@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useScenario } from '../../state/ScenarioContext';
+import { useGrid } from '../../state/GridContext';
 import { buildLineComparison, buildMetricComparison, buildVoltageComparison } from '../../lib/comparison';
 import {
   BUS_STATUS_LABELS,
@@ -13,10 +14,11 @@ import {
 } from '../../lib/format';
 import { StatusBadge } from '../ui';
 import { ComparisonChart, LineComparisonChart, VoltageComparisonChart } from '../charts/ComparisonChart';
+import { CompareEnginesPanel } from './CompareEnginesPanel';
 import type { AnalysisStatus } from '../../state/AnalysisContext';
 import type { PowerFlowResult } from '../../types';
 
-type Tab = 'summary' | 'voltage' | 'lines' | 'compare';
+type Tab = 'summary' | 'voltage' | 'lines' | 'compare' | 'engines';
 
 interface AnalysisResultsPanelProps {
   result: PowerFlowResult | null;
@@ -279,19 +281,28 @@ function CompareResults({
 
 export function AnalysisResultsPanel({ result, status, error }: AnalysisResultsPanelProps) {
   const [tab, setTab] = useState<Tab>('summary');
+  const { grid } = useGrid();
+  const tabs: Tab[] = ['summary', 'voltage', 'lines', 'compare', 'engines'];
+  const tabLabels: Record<Tab, string> = {
+    summary: 'Summary',
+    voltage: 'Voltage',
+    lines: 'Lines',
+    compare: 'Compare',
+    engines: 'Engines',
+  };
 
   if (!result) {
     return (
       <div className="results-panel">
         <div className="results-tabs">
-          {(['summary', 'voltage', 'lines', 'compare'] as Tab[]).map((key) => (
+          {tabs.map((key) => (
             <button
               key={key}
               type="button"
               className={`results-tab${tab === key ? ' results-tab-active' : ''}`}
               onClick={() => setTab(key)}
             >
-              {key[0].toUpperCase() + key.slice(1)}
+              {tabLabels[key]}
             </button>
           ))}
         </div>
@@ -306,15 +317,20 @@ export function AnalysisResultsPanel({ result, status, error }: AnalysisResultsP
 
   return (
     <div className="results-panel">
+      {status === 'outdated' && (
+        <div className="outdated-banner" style={{ background: '#fff3cd', color: '#856404', padding: '10px', marginBottom: '10px', borderRadius: '4px', border: '1px solid #ffeeba' }}>
+          <strong>OUTDATED:</strong> The grid has been modified since this analysis was run. Please re-run the analysis.
+        </div>
+      )}
       <div className="results-tabs">
-        {(['summary', 'voltage', 'lines', 'compare'] as Tab[]).map((key) => (
+        {tabs.map((key) => (
           <button
             key={key}
             type="button"
             className={`results-tab${tab === key ? ' results-tab-active' : ''}`}
             onClick={() => setTab(key)}
           >
-            {key[0].toUpperCase() + key.slice(1)}
+            {tabLabels[key]}
           </button>
         ))}
       </div>
@@ -322,6 +338,7 @@ export function AnalysisResultsPanel({ result, status, error }: AnalysisResultsP
       {tab === 'voltage' ? <VoltageTab result={result} /> : null}
       {tab === 'lines' ? <LinesTab result={result} /> : null}
       {tab === 'compare' ? <CompareTab base={result} /> : null}
+      {tab === 'engines' ? <CompareEnginesPanel grid={grid} /> : null}
     </div>
   );
 }

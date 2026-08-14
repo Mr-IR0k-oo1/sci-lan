@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from typing import Literal
+
+from fastapi import APIRouter, Response
 
 from app.domain.recommendation_models import (
     AnalysisRecord,
@@ -12,6 +14,7 @@ from app.schemas.stress import (
 )
 from app.services import (
     analysis_history_service,
+    export_service,
     grid_service,
     stress_analysis_service,
 )
@@ -66,6 +69,36 @@ def get_stress_analysis(analysis_id: str) -> AnalysisRecord:
 def list_mitigation_candidates(analysis_id: str) -> list[MitigationCandidate]:
     record = analysis_history_service.get_analysis(analysis_id)
     return record.mitigation_candidates
+
+
+@router.get(
+    "/analyses/{analysis_id}/export",
+    responses={
+        200: {
+            "content": {
+                "application/json": {},
+                "text/csv": {},
+            }
+        }
+    },
+)
+def export_analysis(
+    analysis_id: str,
+    format: Literal["json", "csv"] = "json",
+) -> Response:
+    record = analysis_history_service.get_analysis(analysis_id)
+    filename, content_type, body = export_service.export_analysis(record, format)
+    if isinstance(body, dict):
+        import json
+
+        content = json.dumps(body, indent=2, default=str)
+    else:
+        content = body
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post(

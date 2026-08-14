@@ -1,0 +1,6 @@
+{
+  "converged": true,
+  "max_voltage_pu": 1.06,
+  "min_voltage_pu": 0.95,
+  "overloaded_lines": 0
+}

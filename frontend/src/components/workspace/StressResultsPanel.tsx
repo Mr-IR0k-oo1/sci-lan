@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import type { ComponentSelection } from '../../types';
 import { useStress } from '../../state/StressContext';
+import { download } from '../../api/client';
 import { GridHealthPanel } from './stress/GridHealthPanel';
 import { IssueExplorerPanel } from './stress/IssueExplorerPanel';
 import { RecommendationsPanel } from './stress/RecommendationsPanel';
 import { MitigationPanel } from './stress/MitigationPanel';
+import { Button } from '../ui';
 
 type Tab = 'health' | 'issues' | 'recommendations' | 'mitigations';
 
@@ -22,6 +24,7 @@ interface StressResultsPanelProps {
 export function StressResultsPanel({ onSelect }: StressResultsPanelProps) {
   const { status, record, error, runMitigationTests } = useStress();
   const [tab, setTab] = useState<Tab>('health');
+  const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
 
   if (!record) {
     return (
@@ -50,6 +53,15 @@ export function StressResultsPanel({ onSelect }: StressResultsPanelProps) {
   const stress = record.stress;
   const issueCount = stress.issues.length;
 
+  const handleExport = async (format: 'json' | 'csv') => {
+    setExporting(format);
+    try {
+      await download(`/analyses/${record.id}/export?format=${format}`, `${record.id}.${format}`);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const tabLabel = (key: Tab) =>
     key === 'issues' && issueCount > 0 ? `Issues (${issueCount})` : TABS.find((t) => t.key === key)?.label ?? key;
 
@@ -66,6 +78,22 @@ export function StressResultsPanel({ onSelect }: StressResultsPanelProps) {
             {tabLabel(key)}
           </button>
         ))}
+        <span className="results-export">
+          <Button
+            variant="ghost"
+            disabled={exporting !== null}
+            onClick={() => void handleExport('json')}
+          >
+            {exporting === 'json' ? 'Exporting…' : 'Export JSON'}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={exporting !== null}
+            onClick={() => void handleExport('csv')}
+          >
+            {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
+          </Button>
+        </span>
       </div>
 
       {tab === 'health' ? <GridHealthPanel stress={stress} /> : null}

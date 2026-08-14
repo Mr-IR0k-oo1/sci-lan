@@ -2,6 +2,11 @@ class GridFlexError(Exception):
     """Base class for all GridFlex domain errors."""
 
 
+class InvalidConfiguration(GridFlexError):
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 class GridNotFound(GridFlexError):
     def __init__(self, grid_id: str):
         self.grid_id = grid_id
